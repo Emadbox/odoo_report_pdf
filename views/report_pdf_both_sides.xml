@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<openerp>
+	<data>      
+       		  
+        <record model="ir.ui.view" id="report_pdf_both_sides_form">
+            <field name="name">report_pdf_both_sides_form</field>
+            <field name="model">report.paperformat</field>   
+            <field name="inherit_id" ref="report.paperformat_view_form"/> 
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+	            <field name="dpi" position="after"> 
+	                <field name="both_sides"/>
+	            </field>
+            </field> 
+        </record>        
+	</data>
+</openerp>
