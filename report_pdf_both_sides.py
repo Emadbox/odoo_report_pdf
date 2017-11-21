@@ -76,11 +76,8 @@ class report_pdf_both_sides(osv.Model):
     _inherit = 'report'   
 
     def _merge_pdf(self, documents, both_sides = False):
-        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-        print "merge_pdf %s" % (both_sides)
-        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
         """Merge PDF files into one.
- 
+
         :param documents: list of path of pdf files
         :returns: path of the merged pdf
         """
@@ -104,30 +101,31 @@ class report_pdf_both_sides(osv.Model):
                         IFsgPEYyMjBCNDlBNjRDOEEzRDY3QUFBQzNCODAwNkI5RkRDPgo8RjIyMEI0OUE2NEM4QTNENjdB
                         QUFDM0I4MDA2QjlGREM+IF0KL0RvY0NoZWNrc3VtIC83NzUwQTAyMEVFNEUwQkU5NjVGMzBDNTND
                         MkRGNUFGNgo+PgpzdGFydHhyZWYKNzM2CiUlRU9GCg=='''
-        
-        writer = PdfFileWriter()
         blank_page = PdfFileReader(StringIO.StringIO(blankpdfstr.decode("base64"))).pages[0]
+        writer = PdfFileWriter()
         streams = []  # We have to close the streams *after* PdfFilWriter's call to write()
-        for document in documents:
-            pdfreport = file(document, 'rb')
-            streams.append(pdfreport)
-            reader = PdfFileReader(pdfreport)
-            for page in range(0, reader.getNumPages()):
-                writer.addPage(reader.getPage(page))
-            if reader.getNumPages() % 2 and both_sides: 
-                writer.addPage(blank_page)
- 
-        merged_file_fd, merged_file_path = tempfile.mkstemp(suffix='.html', prefix='report.merged.tmp.')
-        with closing(os.fdopen(merged_file_fd, 'w')) as merged_file:
-            writer.write(merged_file)
- 
-        for stream in streams:
-            stream.close()
- 
+        try:
+            for document in documents:
+                pdfreport = file(document, 'rb')
+                streams.append(pdfreport)
+                reader = PdfFileReader(pdfreport)
+                for page in range(0, reader.getNumPages()):
+                    writer.addPage(reader.getPage(page))
+                if reader.getNumPages() % 2 and both_sides: 
+                    writer.addPage(blank_page)
+
+            merged_file_fd, merged_file_path = tempfile.mkstemp(suffix='.pdf', prefix='report.merged.tmp.')
+            with closing(os.fdopen(merged_file_fd, 'w')) as merged_file:
+                writer.write(merged_file)
+        finally:
+            for stream in streams:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+
         return merged_file_path
-
-
-    def _run_wkhtmltopdf(self, cr, uid, headers, footers, bodies, landscape, paperformat, spec_paperformat_args=None, save_in_attachment=None):
+    def _run_wkhtmltopdf(self, cr, uid, headers, footers, bodies, landscape, paperformat, spec_paperformat_args=None, save_in_attachment=None, set_viewport_size=False, context=None):
         """Execute wkhtmltopdf as a subprocess in order to convert html given in input into a pdf
         document.
 
@@ -140,7 +138,12 @@ class report_pdf_both_sides(osv.Model):
         :param save_in_attachment: dict of reports to save/load in/from the db
         :returns: Content of the pdf as a string
         """
+        if not save_in_attachment:
+            save_in_attachment = {}
+
         command_args = []
+        if set_viewport_size:
+            command_args.extend(['--viewport-size', landscape and '1024x1280' or '1280x1024'])
 
         # Passing the cookie to wkhtmltopdf in order to resolve internal links.
         try:
@@ -151,13 +154,13 @@ class report_pdf_both_sides(osv.Model):
 
         # Wkhtmltopdf arguments
         command_args.extend(['--quiet'])  # Less verbose error messages
+        both_sides = False
         if paperformat:
-            # Convert the paperformat record into arguments
+                # Convert the paperformat record into arguments
             command_args.extend(self._build_wkhtmltopdf_args(paperformat, spec_paperformat_args))
             both_sides = paperformat.both_sides
-        else:
-            both_sides = False
-            
+
+
         # Force the landscape orientation if necessary
         if landscape and '--orientation' in command_args:
             command_args_copy = list(command_args)
@@ -166,7 +169,7 @@ class report_pdf_both_sides(osv.Model):
                     del command_args[index]
                     del command_args[index]
                     command_args.extend(['--orientation', 'landscape'])
-        elif landscape and not '--orientation' in command_args:
+        elif landscape and '--orientation' not in command_args:
             command_args.extend(['--orientation', 'landscape'])
 
         # Execute WKhtmltopdf
@@ -210,14 +213,12 @@ class report_pdf_both_sides(osv.Model):
             try:
                 wkhtmltopdf = [_get_wkhtmltopdf_bin()] + command_args + local_command_args
                 wkhtmltopdf += [content_file_path] + [pdfreport_path]
-
                 process = subprocess.Popen(wkhtmltopdf, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 out, err = process.communicate()
 
                 if process.returncode not in [0, 1]:
-                    raise osv.except_osv(_('Report (PDF)'),
-                                         _('Wkhtmltopdf failed (error code: %s). '
-                                           'Message: %s') % (str(process.returncode), err))
+                    raise UserError(_('Wkhtmltopdf failed (error code: %s). '
+                                      'Message: %s') % (str(process.returncode), err))
 
                 # Save the pdf in attachment if marked
                 if reporthtml[0] is not False and save_in_attachment.get(reporthtml[0]):
@@ -230,10 +231,9 @@ class report_pdf_both_sides(osv.Model):
                             'res_id': reporthtml[0],
                         }
                         try:
-                            self.pool['ir.attachment'].create(cr, uid, attachment)
+                            self.pool['ir.attachment'].create(cr, uid, attachment, context)
                         except AccessError:
-                            _logger.warning("Cannot save PDF report %r as attachment",
-                                            attachment['name'])
+                            _logger.info("Cannot save PDF report %r as attachment", attachment['name'])
                         else:
                             _logger.info('The PDF document %s is now saved in the database',
                                          attachment['name'])
@@ -246,11 +246,6 @@ class report_pdf_both_sides(osv.Model):
         if len(pdfdocuments) == 1:
             entire_report_path = pdfdocuments[0]
         else:
-            print "---------------------------------------"
-            print "---------------------------------------"
-            print "both sides : %s" % (both_sides)
-            print "---------------------------------------"
-            print "---------------------------------------"
             entire_report_path = self._merge_pdf(pdfdocuments,both_sides)
             temporary_files.append(entire_report_path)
 
@@ -265,5 +260,3 @@ class report_pdf_both_sides(osv.Model):
                 _logger.error('Error when trying to remove file %s' % temporary_file)
 
         return content
-    
-
