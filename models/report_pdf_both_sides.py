@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Extraschool
@@ -21,15 +20,15 @@
 #
 ##############################################################################
 
-from openerp import api
-from openerp import SUPERUSER_ID
-from openerp.exceptions import AccessError
-from openerp.osv import osv, fields
-from openerp.tools import config
-from openerp.tools.misc import find_in_path
-from openerp.tools.translate import _
-from openerp.addons.web.http import request
-from openerp.tools.safe_eval import safe_eval as eval
+from odoo import api
+from odoo import SUPERUSER_ID
+from odoo.exceptions import AccessError
+from odoo.osv import osv, fields
+from odoo.tools import config
+from odoo.tools.misc import find_in_path
+from odoo.tools.translate import _
+from odoo.addons.web.http import request
+from odoo.tools.safe_eval import safe_eval as eval
 
 
 import re
