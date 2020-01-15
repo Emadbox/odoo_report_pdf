@@ -25,7 +25,7 @@
     'version' : '0.0.1',
     'author' : 'Town of La Bruyère and Imio',
     'depends' : ['base', 
-                 'report',
+                 'web',
                  ],
     'init_xml' : [],
     'demo' : [],
